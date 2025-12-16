@@ -1,0 +1,83 @@
+@import 'tailwindcss';
+
+:root {
+  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   FLOAT COLOR PALETTE
+   - Cyan/Teal: Structure, headers, UI chrome
+   - Magenta/Pink: Accents, special items, highlights
+   - Green: Shell blocks, success states only
+   - Violet/Purple: AI blocks
+   - Amber: Context markers
+   - Red: Errors
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Plate editor base styles */
+.plate-editor {
+  @apply outline-none;
+}
+
+/* Block types - diversified palette */
+.block-sh { @apply font-mono text-emerald-400; }
+.block-output { @apply font-mono text-neutral-300 text-sm; }
+.block-error { @apply font-mono text-red-400 text-sm; }
+.block-ctx { @apply text-amber-400; }
+.block-ai { @apply text-violet-400; }
+
+/* Markdown rendered elements - rainbow headers */
+.plate-h1 { @apply text-2xl font-bold text-cyan-400 my-2; }
+.plate-h2 { @apply text-xl font-semibold text-fuchsia-400 my-2; }
+.plate-h3 { @apply text-lg font-medium text-violet-400 my-1; }
+.plate-bold { @apply font-bold text-fuchsia-300; }
+.plate-italic { @apply italic text-neutral-300; }
+.plate-code { @apply font-mono bg-neutral-800/80 px-1.5 py-0.5 rounded text-cyan-300; }
+.plate-code-block { @apply font-mono bg-neutral-900 p-3 rounded-md my-2 overflow-x-auto border border-fuchsia-900/30; }
+.plate-list { @apply pl-4; }
+.plate-list-item { @apply list-disc; }
+
+/* Pane chrome - cyan accent */
+.pane-header {
+  @apply flex items-center justify-between px-2 py-1 bg-neutral-900 border-b border-cyan-900/50 text-xs text-neutral-400;
+}
+
+/* Split resize handle - pink/magenta on hover */
+.resize-handle {
+  @apply bg-neutral-800 hover:bg-fuchsia-900/50 transition-colors;
+}
+.resize-handle-horizontal {
+  @apply w-1 cursor-col-resize;
+}
+.resize-handle-vertical {
+  @apply h-1 cursor-row-resize;
+}
+
+/* Focus states - cyan ring */
+.block-focused {
+  @apply ring-1 ring-cyan-700/50 ring-offset-1 ring-offset-neutral-950;
+}
+
+/* Scrollbar styling - subtle pink thumb */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-neutral-900;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-neutral-700 rounded;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-fuchsia-900/70;
+}
+
+/* Virtual block list performance */
+.virtual-block-list {
+  contain: strict;
+}

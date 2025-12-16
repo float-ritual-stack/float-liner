@@ -1,0 +1,46 @@
+{
+  "name": "float-liner",
+  "version": "0.1.0",
+  "description": "FLOAT Substrate #14 - blocks-based outliner with platejs v52+",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.9.1",
+    "@tanstack/react-virtual": "^3.13.13",
+    "platejs": "^52.0.11",
+    "@platejs/markdown": "^52.0.11",
+    "@platejs/basic-nodes": "^52.0.11",
+    "@platejs/code-block": "^52.0.11",
+    "@platejs/list": "^52.0.11",
+    "@platejs/autoformat": "^52.0.11",
+    "@platejs/toggle": "^52.0.11",
+    "remark-gfm": "^4.0.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "slate": "^0.120.0",
+    "slate-history": "^0.113.1",
+    "slate-react": "^0.120.0",
+    "uuid": "^13.0.0",
+    "yjs": "^13.6.27",
+    "zustand": "^5.0.9"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.18",
+    "@tailwindcss/vite": "^4.1.18",
+    "@tauri-apps/cli": "^2.9.6",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@types/uuid": "^10.0.0",
+    "@vitejs/plugin-react": "^5.1.2",
+    "autoprefixer": "^10.4.22",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.18",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.7"
+  }
+}
