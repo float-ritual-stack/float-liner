@@ -240,12 +240,13 @@ function serializeToMarkdown(value: Value): string {
             return `## ${text}`;
           case 'h3':
             return `### ${text}`;
-          case 'code_block':
+          case 'code_block': {
             // Code blocks have code_line children, join with newlines
             const codeLines = (node.children as any[])
               .map((line: any) => serializeChildrenToMarkdown(line.children || []))
               .join('\n');
             return '```\n' + codeLines + '\n```';
+          }
           default:
             return text;
         }

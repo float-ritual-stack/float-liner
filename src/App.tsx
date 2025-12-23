@@ -26,6 +26,9 @@ function App() {
   // Shortcuts help modal
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
 
+  // Workspace load error state
+  const [workspaceLoadError, setWorkspaceLoadError] = useState<string | null>(null);
+
   // Workspace state
   const [currentWorkspace, setCurrentWorkspace] = useState<string>('default');
   const [workspaceList, setWorkspaceList] = useState<string[]>(['default']);
@@ -67,6 +70,7 @@ function App() {
         setWorkspaceList(list);
       } catch (err) {
         console.error('Failed to load workspace info:', err);
+        setWorkspaceLoadError(`Failed to load workspace info: ${err}`);
       }
     }
     loadWorkspaceInfo();
@@ -225,6 +229,22 @@ function App() {
 
   return (
     <div className="h-screen flex flex-col bg-neutral-950 text-neutral-100">
+      {/* Workspace load error banner */}
+      {workspaceLoadError && (
+        <div className="px-4 py-2 bg-red-900/50 border-b border-red-700 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm text-red-300">
+            <span className="text-red-400">⚠</span>
+            <span>{workspaceLoadError}</span>
+          </div>
+          <button
+            className="text-xs px-2 py-1 bg-red-800 hover:bg-red-700 text-red-200 rounded transition-colors"
+            onClick={() => setWorkspaceLoadError(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* App header */}
       <header className="flex items-center justify-between px-4 py-2 bg-neutral-900 border-b border-cyan-900/30">
         <div className="flex items-center gap-4">
