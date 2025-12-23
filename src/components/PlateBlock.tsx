@@ -442,9 +442,6 @@ export function PlateBlock({
 
   // Handle keyboard events with cursor-aware navigation
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    // Debug: uncomment to see what keys are being pressed
-    // console.log('KeyDown:', { key: e.key, code: e.code, meta: e.metaKey, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey });
-
     // Cmd/Ctrl + . - toggle expand/collapse
     if ((e.metaKey || e.ctrlKey) && (e.key === '.' || e.code === 'Period')) {
       e.preventDefault();

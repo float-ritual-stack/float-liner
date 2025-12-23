@@ -175,12 +175,13 @@ export function useSyncedYDoc(
       }
     }
 
-    // Observe all changes
+    // Observe all changes - store in ref for proper cleanup
     const updateHandler = (_update: Uint8Array, origin: unknown) => {
       // Don't sync back changes that came from Rust
       if (origin === 'remote' || isApplyingRemoteRef.current) return;
       debouncedSync();
     };
+    updateHandlerRef.current = updateHandler;
 
     doc.on('update', updateHandler);
     loadInitialState();
@@ -188,6 +189,7 @@ export function useSyncedYDoc(
     return () => {
       mounted = false;
       doc.off('update', updateHandler);
+      updateHandlerRef.current = null;
       if (syncTimerRef.current) {
         clearTimeout(syncTimerRef.current);
       }
