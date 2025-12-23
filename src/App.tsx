@@ -88,6 +88,8 @@ function App() {
       return;
     }
     try {
+      // Save current workspace before switching
+      await invoke('save_doc');
       const newStateB64 = await invoke<string>('load_workspace', { name });
       reloadFromState(newStateB64);
       setCurrentWorkspace(name);
