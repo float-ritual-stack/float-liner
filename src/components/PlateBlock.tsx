@@ -280,24 +280,28 @@ interface PlateBlockProps {
   content: string;
   blockType: string;
   isFocused: boolean;
+  hasChildren: boolean;
   onChange: (content: string) => void;
   onNavigateUp: () => void;
   onNavigateDown: () => void;
-  onTreeAction: (action: 'indent' | 'outdent' | 'newBlockAfter' | 'deleteIfEmpty' | 'zoomIntoBlock') => void;
+  onTreeAction: (action: 'indent' | 'outdent' | 'newBlockAfter' | 'deleteIfEmpty' | 'zoomIntoBlock' | 'moveUp' | 'moveDown') => void;
   onFocus?: () => void;
   onExecute?: () => void;
+  onToggleCollapsed?: () => void;
 }
 
 export function PlateBlock({
   content,
   blockType,
   isFocused,
+  hasChildren,
   onChange,
   onNavigateUp,
   onNavigateDown,
   onTreeAction,
   onFocus,
   onExecute,
+  onToggleCollapsed,
 }: PlateBlockProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const lastContentRef = useRef(content);
@@ -437,6 +441,33 @@ export function PlateBlock({
 
   // Handle keyboard events with cursor-aware navigation
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // Debug: uncomment to see what keys are being pressed
+    // console.log('KeyDown:', { key: e.key, code: e.code, meta: e.metaKey, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey });
+
+    // Cmd/Ctrl + . - toggle expand/collapse
+    if ((e.metaKey || e.ctrlKey) && (e.key === '.' || e.code === 'Period')) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (hasChildren && onToggleCollapsed) {
+        onToggleCollapsed();
+      }
+      return;
+    }
+
+    // Alt + Shift + Arrow Up/Down - move block up/down (more reliable than Cmd+Shift which is often system-captured)
+    if (e.altKey && e.shiftKey && (e.key === 'ArrowUp' || e.code === 'ArrowUp')) {
+      e.preventDefault();
+      e.stopPropagation();
+      onTreeAction('moveUp');
+      return;
+    }
+    if (e.altKey && e.shiftKey && (e.key === 'ArrowDown' || e.code === 'ArrowDown')) {
+      e.preventDefault();
+      e.stopPropagation();
+      onTreeAction('moveDown');
+      return;
+    }
+
     // Tab - indent/outdent (always intercept)
     if (e.key === 'Tab') {
       e.preventDefault();
@@ -492,7 +523,7 @@ export function PlateBlock({
         onTreeAction('deleteIfEmpty');
       }
     }
-  }, [editor, onNavigateUp, onNavigateDown, onTreeAction, onExecute]);
+  }, [editor, onNavigateUp, onNavigateDown, onTreeAction, onExecute, hasChildren, onToggleCollapsed]);
 
   // Determine styling based on block type
   const typeClass = blockType === 'sh' ? 'block-sh' :

@@ -45,13 +45,15 @@ export const BlockItem = memo(function BlockItem({
   doc,
 }: BlockItemProps) {
   // Use shallow selectors to prevent unnecessary rerenders
-  const { updateBlockContent, createBlockAfter, deleteBlock, indentBlock, outdentBlock } = useBlockStore(
+  const { updateBlockContent, createBlockAfter, deleteBlock, indentBlock, outdentBlock, moveBlockUp, moveBlockDown } = useBlockStore(
     useShallow(state => ({
       updateBlockContent: state.updateBlockContent,
       createBlockAfter: state.createBlockAfter,
       deleteBlock: state.deleteBlock,
       indentBlock: state.indentBlock,
       outdentBlock: state.outdentBlock,
+      moveBlockUp: state.moveBlockUp,
+      moveBlockDown: state.moveBlockDown,
     }))
   );
 
@@ -64,9 +66,9 @@ export const BlockItem = memo(function BlockItem({
     [block.id, updateBlockContent]
   );
 
-  // Handle tree operations (indent, outdent, new block, delete, zoom)
+  // Handle tree operations (indent, outdent, new block, delete, zoom, move)
   const handleTreeAction = useCallback(
-    (action: 'indent' | 'outdent' | 'newBlockAfter' | 'deleteIfEmpty' | 'zoomIntoBlock') => {
+    (action: 'indent' | 'outdent' | 'newBlockAfter' | 'deleteIfEmpty' | 'zoomIntoBlock' | 'moveUp' | 'moveDown') => {
       switch (action) {
         case 'indent':
           indentBlock(block.id);
@@ -93,9 +95,15 @@ export const BlockItem = memo(function BlockItem({
             onZoomIntoBlock(block.id);
           }
           break;
+        case 'moveUp':
+          moveBlockUp(block.id);
+          break;
+        case 'moveDown':
+          moveBlockDown(block.id);
+          break;
       }
     },
-    [block.id, block.content, block.childIds.length, indentBlock, outdentBlock, createBlockAfter, deleteBlock, onNavigateUp, onRequestFocus, onZoomIntoBlock]
+    [block.id, block.content, block.childIds.length, indentBlock, outdentBlock, createBlockAfter, deleteBlock, onNavigateUp, onRequestFocus, onZoomIntoBlock, moveBlockUp, moveBlockDown]
   );
 
   // Execute sh:: command
@@ -169,12 +177,14 @@ export const BlockItem = memo(function BlockItem({
           content={block.content}
           blockType={block.type}
           isFocused={isFocused}
+          hasChildren={hasChildren}
           onChange={handleChange}
           onNavigateUp={onNavigateUp}
           onNavigateDown={onNavigateDown}
           onTreeAction={handleTreeAction}
           onFocus={handleFocus}
           onExecute={isExecutableShellBlock(block.content) ? handleExecute : undefined}
+          onToggleCollapsed={onToggleCollapsed}
         />
       ) : (
         <StaticBlockRenderer

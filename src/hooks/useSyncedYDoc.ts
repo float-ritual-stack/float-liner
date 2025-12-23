@@ -115,10 +115,14 @@ export function useSyncedYDoc(
       syncTimerRef.current = null;
     }
 
-    // Clean up old doc's event handler
+    // Clean up old doc's event handler and destroy it
     const oldDoc = docRef.current;
     if (oldDoc && updateHandlerRef.current) {
       oldDoc.off('update', updateHandlerRef.current);
+      updateHandlerRef.current = null;
+    }
+    if (oldDoc) {
+      oldDoc.destroy();
     }
 
     // Create a fresh doc and apply the new state

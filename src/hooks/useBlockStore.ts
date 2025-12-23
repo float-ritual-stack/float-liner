@@ -38,6 +38,8 @@ export interface BlockStore {
   deleteBlock: (id: string) => void;
   indentBlock: (id: string) => void;
   outdentBlock: (id: string) => void;
+  moveBlockUp: (id: string) => void;
+  moveBlockDown: (id: string) => void;
   toggleCollapsed: (id: string) => void;
 
   // Internal
@@ -404,6 +406,88 @@ export const useBlockStore = create<BlockStore>((set, get) => ({
 
       // Update block's parentId
       setValueOnYMap(blocksMap, id, 'parentId', parent.parentId);
+      setValueOnYMap(blocksMap, id, 'updatedAt', Date.now());
+    });
+  },
+
+  moveBlockUp: (id: string) => {
+    const { _doc, blocks } = get();
+    if (!_doc) return;
+
+    const block = blocks.get(id);
+    if (!block) return;
+
+    // Find siblings array (from parent's childIds or rootIds)
+    let siblings: string[];
+    let isRoot = false;
+    if (block.parentId) {
+      const parent = blocks.get(block.parentId);
+      siblings = parent?.childIds || [];
+    } else {
+      siblings = get().rootIds;
+      isRoot = true;
+    }
+
+    const index = siblings.indexOf(id);
+    if (index <= 0) return; // Can't move up if first
+
+    _doc.transact(() => {
+      const blocksMap = _doc.getMap('blocks');
+
+      if (isRoot) {
+        // Swap in rootIds array
+        const rootIds = _doc.getArray<string>('rootIds');
+        // Delete both items and re-insert in swapped order
+        rootIds.delete(index - 1, 2);
+        rootIds.insert(index - 1, [id, siblings[index - 1]]);
+      } else {
+        // Swap in parent's childIds
+        const newChildIds = [...siblings];
+        [newChildIds[index - 1], newChildIds[index]] = [newChildIds[index], newChildIds[index - 1]];
+        setValueOnYMap(blocksMap, block.parentId!, 'childIds', newChildIds);
+      }
+
+      setValueOnYMap(blocksMap, id, 'updatedAt', Date.now());
+    });
+  },
+
+  moveBlockDown: (id: string) => {
+    const { _doc, blocks } = get();
+    if (!_doc) return;
+
+    const block = blocks.get(id);
+    if (!block) return;
+
+    // Find siblings array (from parent's childIds or rootIds)
+    let siblings: string[];
+    let isRoot = false;
+    if (block.parentId) {
+      const parent = blocks.get(block.parentId);
+      siblings = parent?.childIds || [];
+    } else {
+      siblings = get().rootIds;
+      isRoot = true;
+    }
+
+    const index = siblings.indexOf(id);
+    if (index < 0 || index >= siblings.length - 1) return; // Can't move down if last
+
+    _doc.transact(() => {
+      const blocksMap = _doc.getMap('blocks');
+
+      if (isRoot) {
+        // Swap in rootIds array
+        const rootIds = _doc.getArray<string>('rootIds');
+        // Delete both items and re-insert in swapped order
+        rootIds.delete(index, 2);
+        rootIds.insert(index, [siblings[index + 1], id]);
+      } else {
+        // Swap in parent's childIds
+        const newChildIds = [...siblings];
+        [newChildIds[index], newChildIds[index + 1]] = [newChildIds[index + 1], newChildIds[index]];
+        setValueOnYMap(blocksMap, block.parentId!, 'childIds', newChildIds);
+      }
+
       setValueOnYMap(blocksMap, id, 'updatedAt', Date.now());
     });
   },

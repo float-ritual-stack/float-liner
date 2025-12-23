@@ -23,6 +23,9 @@ function App() {
   // Save state
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
+  // Shortcuts help modal
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+
   // Workspace state
   const [currentWorkspace, setCurrentWorkspace] = useState<string>('default');
   const [workspaceList, setWorkspaceList] = useState<string[]>(['default']);
@@ -175,7 +178,19 @@ function App() {
         usePaneStore.getState().setActivePane(panes[index].id);
       }
     }
-  }, [layout.activePaneId, splitPane, closePane, getAllLeafPanes, saveDocument]);
+
+    // Cmd+? (Cmd+Shift+/) - show shortcuts help
+    if (e.key === '?' && e.metaKey) {
+      e.preventDefault();
+      setShowShortcutsHelp(true);
+    }
+
+    // Escape - close shortcuts help
+    if (e.key === 'Escape' && showShortcutsHelp) {
+      e.preventDefault();
+      setShowShortcutsHelp(false);
+    }
+  }, [layout.activePaneId, splitPane, closePane, getAllLeafPanes, saveDocument, showShortcutsHelp]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
@@ -328,13 +343,121 @@ function App() {
           <span className="text-neutral-700">•</span>
           <span className="text-cyan-600">⌘W</span>
           <span className="text-neutral-600">close</span>
+          <span className="text-neutral-700">•</span>
+          <button
+            className="text-cyan-600 hover:text-cyan-400 transition-colors"
+            onClick={() => setShowShortcutsHelp(true)}
+            title="Keyboard shortcuts (⌘?)"
+          >
+            ⌘?
+          </button>
+          <span className="text-neutral-600">help</span>
         </div>
       </header>
+
+      {/* Keyboard shortcuts help modal */}
+      {showShortcutsHelp && (
+        <div 
+          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50"
+          onClick={() => setShowShortcutsHelp(false)}
+        >
+          <div 
+            className="bg-neutral-900 border border-neutral-700 rounded-lg shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-700">
+              <h2 className="text-lg font-bold text-cyan-400">Keyboard Shortcuts</h2>
+              <button
+                className="text-neutral-500 hover:text-neutral-300 text-xl"
+                onClick={() => setShowShortcutsHelp(false)}
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* Global shortcuts */}
+              <div>
+                <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-3">Global</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <ShortcutRow keys="⌘ S" description="Save document" />
+                  <ShortcutRow keys="⌘ ?" description="Show this help" />
+                  <ShortcutRow keys="Esc" description="Close modal/menu" />
+                </div>
+              </div>
+
+              {/* Pane shortcuts */}
+              <div>
+                <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-3">Panes</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <ShortcutRow keys="⌘ \\" description="Split horizontal" />
+                  <ShortcutRow keys="⌘ ⇧ \\" description="Split vertical" />
+                  <ShortcutRow keys="⌘ W" description="Close pane" />
+                  <ShortcutRow keys="⌘ 1-5" description="Focus pane by index" />
+                </div>
+              </div>
+
+              {/* Block editing */}
+              <div>
+                <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-3">Block Editing</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <ShortcutRow keys="Enter" description="New block after / Execute sh::" />
+                  <ShortcutRow keys="⌘ Enter" description="Zoom into block" />
+                  <ShortcutRow keys="Backspace" description="Delete empty block" />
+                  <ShortcutRow keys="Tab" description="Indent block" />
+                  <ShortcutRow keys="⇧ Tab" description="Outdent block" />
+                </div>
+              </div>
+
+              {/* Block navigation & organization */}
+              <div>
+                <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-3">Navigation & Organization</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <ShortcutRow keys="↑ / ↓" description="Navigate between blocks" />
+                  <ShortcutRow keys="⌘ ." description="Toggle expand/collapse" />
+                  <ShortcutRow keys="⌥ ⇧ ↑" description="Move block up" />
+                  <ShortcutRow keys="⌥ ⇧ ↓" description="Move block down" />
+                </div>
+              </div>
+
+              {/* Formatting */}
+              <div>
+                <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-3">Markdown Formatting</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <ShortcutRow keys="# " description="Heading 1" />
+                  <ShortcutRow keys="## " description="Heading 2" />
+                  <ShortcutRow keys="### " description="Heading 3" />
+                  <ShortcutRow keys="**text**" description="Bold" />
+                  <ShortcutRow keys="*text*" description="Italic" />
+                  <ShortcutRow keys="`code`" description="Inline code" />
+                  <ShortcutRow keys="~~text~~" description="Strikethrough" />
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-neutral-700 text-xs text-neutral-500 text-center">
+              Press <kbd className="px-1.5 py-0.5 bg-neutral-800 rounded text-cyan-400">Esc</kbd> or click outside to close
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Pane layout */}
       <main className="flex-1 min-h-0">
         <PaneLayout node={layout.root} doc={doc} />
       </main>
+    </div>
+  );
+}
+
+// Shortcut row component for the help modal
+function ShortcutRow({ keys, description }: { keys: string; description: string }) {
+  return (
+    <div className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-neutral-800/50">
+      <span className="text-sm text-neutral-300">{description}</span>
+      <kbd className="px-2 py-1 bg-neutral-800 border border-neutral-700 rounded text-xs font-mono text-cyan-400">
+        {keys}
+      </kbd>
     </div>
   );
 }
