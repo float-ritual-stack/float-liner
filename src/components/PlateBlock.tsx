@@ -175,7 +175,91 @@ function textToValue(text: string): Value {
   return [{ type: 'p', children: [{ text }] }];
 }
 
-function valueToText(value: Value): string {
+/**
+ * Serialize text leaf nodes with their marks back to markdown
+ */
+function serializeLeafToMarkdown(leaf: any): string {
+  let text = leaf.text || '';
+  
+  // Don't wrap empty text
+  if (!text) return text;
+  
+  // Apply marks in correct order (innermost to outermost)
+  if (leaf.code) {
+    text = `\`${text}\``;
+  }
+  if (leaf.bold) {
+    text = `**${text}**`;
+  }
+  if (leaf.italic) {
+    text = `*${text}*`;
+  }
+  if (leaf.strikethrough) {
+    text = `~~${text}~~`;
+  }
+  
+  return text;
+}
+
+/**
+ * Serialize children (text nodes and nested elements) to markdown
+ */
+function serializeChildrenToMarkdown(children: any[]): string {
+  return children
+    .map((child) => {
+      // Text leaf node
+      if ('text' in child) {
+        return serializeLeafToMarkdown(child);
+      }
+      // Nested element (like code_line in code_block)
+      if ('children' in child) {
+        return serializeChildrenToMarkdown(child.children);
+      }
+      return '';
+    })
+    .join('');
+}
+
+/**
+ * Serialize Slate value back to markdown string
+ * Preserves element types (h1, h2, h3) and text marks (bold, italic, etc.)
+ */
+function serializeToMarkdown(value: Value): string {
+  if (!value || !Array.isArray(value)) return '';
+  
+  return value
+    .map((node) => {
+      // Handle element nodes
+      if ('type' in node && 'children' in node) {
+        const text = serializeChildrenToMarkdown(node.children as any[]);
+        
+        switch (node.type) {
+          case 'h1':
+            return `# ${text}`;
+          case 'h2':
+            return `## ${text}`;
+          case 'h3':
+            return `### ${text}`;
+          case 'code_block': {
+            // Code blocks have code_line children, join with newlines
+            const codeLines = (node.children as any[])
+              .map((line: any) => serializeChildrenToMarkdown(line.children || []))
+              .join('\n');
+            return '```\n' + codeLines + '\n```';
+          }
+          default:
+            return text;
+        }
+      }
+      return '';
+    })
+    .join('\n');
+}
+
+/**
+ * Extract plain text from value (used for checking sh:: prefix, etc.)
+ */
+function valueToPlainText(value: Value): string {
   if (!value || !Array.isArray(value)) return '';
   return value
     .map((node) => {
@@ -197,24 +281,28 @@ interface PlateBlockProps {
   content: string;
   blockType: string;
   isFocused: boolean;
+  hasChildren: boolean;
   onChange: (content: string) => void;
   onNavigateUp: () => void;
   onNavigateDown: () => void;
-  onTreeAction: (action: 'indent' | 'outdent' | 'newBlockAfter' | 'deleteIfEmpty' | 'zoomIntoBlock') => void;
+  onTreeAction: (action: 'indent' | 'outdent' | 'newBlockAfter' | 'deleteIfEmpty' | 'zoomIntoBlock' | 'moveUp' | 'moveDown') => void;
   onFocus?: () => void;
   onExecute?: () => void;
+  onToggleCollapsed?: () => void;
 }
 
 export function PlateBlock({
   content,
   blockType,
   isFocused,
+  hasChildren,
   onChange,
   onNavigateUp,
   onNavigateDown,
   onTreeAction,
   onFocus,
   onExecute,
+  onToggleCollapsed,
 }: PlateBlockProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const lastContentRef = useRef(content);
@@ -275,13 +363,13 @@ export function PlateBlock({
     ],
   });
 
-  // Sync content changes
+  // Sync content changes - serialize back to markdown to preserve formatting
   const handleChange = useCallback(
     ({ value }: { value: Value }) => {
-      const newText = valueToText(value);
-      if (newText !== lastContentRef.current) {
-        lastContentRef.current = newText;
-        onChange(newText);
+      const newMarkdown = serializeToMarkdown(value);
+      if (newMarkdown !== lastContentRef.current) {
+        lastContentRef.current = newMarkdown;
+        onChange(newMarkdown);
       }
     },
     [onChange]
@@ -354,6 +442,30 @@ export function PlateBlock({
 
   // Handle keyboard events with cursor-aware navigation
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // Cmd/Ctrl + . - toggle expand/collapse
+    if ((e.metaKey || e.ctrlKey) && (e.key === '.' || e.code === 'Period')) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (hasChildren && onToggleCollapsed) {
+        onToggleCollapsed();
+      }
+      return;
+    }
+
+    // Alt + Shift + Arrow Up/Down - move block up/down (more reliable than Cmd+Shift which is often system-captured)
+    if (e.altKey && e.shiftKey && (e.key === 'ArrowUp' || e.code === 'ArrowUp')) {
+      e.preventDefault();
+      e.stopPropagation();
+      onTreeAction('moveUp');
+      return;
+    }
+    if (e.altKey && e.shiftKey && (e.key === 'ArrowDown' || e.code === 'ArrowDown')) {
+      e.preventDefault();
+      e.stopPropagation();
+      onTreeAction('moveDown');
+      return;
+    }
+
     // Tab - indent/outdent (always intercept)
     if (e.key === 'Tab') {
       e.preventDefault();
@@ -371,7 +483,7 @@ export function PlateBlock({
     // Enter - execute sh:: block OR new block after
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      const currentText = valueToText(editor.children);
+      const currentText = valueToPlainText(editor.children);
       // If it's an sh:: block and we have an execute handler, run it
       if (currentText.trim().startsWith('sh::') && onExecute) {
         onExecute();
@@ -403,13 +515,13 @@ export function PlateBlock({
 
     // Backspace at start of empty block - delete block
     if (e.key === 'Backspace') {
-      const currentText = valueToText(editor.children);
+      const currentText = valueToPlainText(editor.children);
       if (currentText === '' || (isCursorAtEditorStart(editor) && currentText === '')) {
         e.preventDefault();
         onTreeAction('deleteIfEmpty');
       }
     }
-  }, [editor, onNavigateUp, onNavigateDown, onTreeAction, onExecute]);
+  }, [editor, onNavigateUp, onNavigateDown, onTreeAction, onExecute, hasChildren, onToggleCollapsed]);
 
   // Determine styling based on block type
   const typeClass = blockType === 'sh' ? 'block-sh' :
