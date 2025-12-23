@@ -50,6 +50,10 @@ export interface UseSyncedYDocReturn {
   error: string | null;
   /** Force sync to Rust */
   forceSync: () => Promise<void>;
+  /** Reload doc from a new base64 state (for workspace switching) */
+  reloadFromState: (stateB64: string) => void;
+  /** Version counter that increments on reload (use as dependency to re-initialize stores) */
+  docVersion: number;
 }
 
 export function useSyncedYDoc(
@@ -61,6 +65,7 @@ export function useSyncedYDoc(
   const docRef = useRef<Y.Doc>(new Y.Doc());
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [docVersion, setDocVersion] = useState(0);
 
   // Track whether we're currently applying an update from Rust
   const isApplyingRemoteRef = useRef(false);
@@ -98,6 +103,48 @@ export function useSyncedYDoc(
     }
     await syncToRust();
   }, [syncToRust]);
+
+  // Store handler ref for cleanup
+  const updateHandlerRef = useRef<((update: Uint8Array, origin: unknown) => void) | null>(null);
+
+  // Reload doc from a new base64 state (for workspace switching)
+  const reloadFromState = useCallback((stateB64: string) => {
+    // Clear any pending sync
+    if (syncTimerRef.current) {
+      clearTimeout(syncTimerRef.current);
+      syncTimerRef.current = null;
+    }
+
+    // Clean up old doc's event handler
+    const oldDoc = docRef.current;
+    if (oldDoc && updateHandlerRef.current) {
+      oldDoc.off('update', updateHandlerRef.current);
+    }
+
+    // Create a fresh doc and apply the new state
+    const newDoc = new Y.Doc();
+    const stateBytes = base64ToBytes(stateB64);
+    
+    isApplyingRemoteRef.current = true;
+    Y.applyUpdate(newDoc, stateBytes);
+    isApplyingRemoteRef.current = false;
+
+    // Set up update handler on new doc (store ref for later cleanup)
+    const handler = (_update: Uint8Array, origin: unknown) => {
+      if (origin === 'remote' || isApplyingRemoteRef.current) return;
+      debouncedSync();
+    };
+    updateHandlerRef.current = handler;
+    newDoc.on('update', handler);
+
+    // Replace the doc ref
+    docRef.current = newDoc;
+    
+    // Increment version to trigger re-initialization in consuming components
+    setDocVersion(v => v + 1);
+    setIsLoaded(true);
+    setError(null);
+  }, [debouncedSync]);
 
   // Load initial state and set up sync
   useEffect(() => {
@@ -148,6 +195,8 @@ export function useSyncedYDoc(
     isLoaded,
     error,
     forceSync,
+    reloadFromState,
+    docVersion,
   };
 }
 

@@ -24,9 +24,11 @@ export interface BlockStore {
 
   // Y.Doc reference (set externally)
   _doc: Y.Doc | null;
+  _observers: (() => void)[];
 
   // Initialization
   initFromYDoc: (doc: Y.Doc) => void;
+  reset: () => void;
 
   // Block operations
   getBlock: (id: string) => Block | undefined;
@@ -112,26 +114,49 @@ export const useBlockStore = create<BlockStore>((set, get) => ({
   rootIds: [],
   isInitialized: false,
   _doc: null,
+  _observers: [],
+
+  reset: () => {
+    // Clean up old observers
+    const { _observers } = get();
+    _observers.forEach(cleanup => cleanup());
+    
+    set({
+      blocks: new Map(),
+      rootIds: [],
+      isInitialized: false,
+      _doc: null,
+      _observers: [],
+    });
+  },
 
   initFromYDoc: (doc: Y.Doc) => {
-    set({ _doc: doc });
+    // Clean up any existing observers first
+    const { _observers } = get();
+    _observers.forEach(cleanup => cleanup());
+
+    set({ _doc: doc, _observers: [] });
 
     // Initial sync
     get()._syncFromYDoc();
 
     // Observe blocks map changes
     const blocksMap = doc.getMap('blocks');
-    blocksMap.observe(() => {
-      get()._syncFromYDoc();
-    });
+    const blocksHandler = () => get()._syncFromYDoc();
+    blocksMap.observe(blocksHandler);
 
     // Observe rootIds changes
     const rootIds = doc.getArray<string>('rootIds');
-    rootIds.observe(() => {
-      get()._syncFromYDoc();
-    });
+    const rootIdsHandler = () => get()._syncFromYDoc();
+    rootIds.observe(rootIdsHandler);
 
-    set({ isInitialized: true });
+    // Store cleanup functions
+    const cleanups = [
+      () => blocksMap.unobserve(blocksHandler),
+      () => rootIds.unobserve(rootIdsHandler),
+    ];
+
+    set({ isInitialized: true, _observers: cleanups });
   },
 
   _syncFromYDoc: () => {

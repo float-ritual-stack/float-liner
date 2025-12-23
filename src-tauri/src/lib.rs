@@ -17,18 +17,22 @@ use pulldown_cmark::{Parser, Event, Tag, TagEnd, HeadingLevel};
 // PERSISTENCE
 // ═══════════════════════════════════════════════════════════════
 
-/// Get the path to the data file
-fn get_data_path() -> PathBuf {
-    // Use ~/.float-liner/data.yjs for now (simple, visible)
+/// Get the data directory path
+fn get_data_dir() -> PathBuf {
     let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
     let data_dir = home.join(".float-liner");
     fs::create_dir_all(&data_dir).ok();
-    data_dir.join("data.yjs")
+    data_dir
 }
 
-/// Try to load Y.Doc from file
-fn load_doc_from_file() -> Option<Doc> {
-    let path = get_data_path();
+/// Get the path to a workspace file
+fn get_workspace_path(name: &str) -> PathBuf {
+    get_data_dir().join(format!("{}.yjs", name))
+}
+
+/// Try to load Y.Doc from a workspace file
+fn load_doc_from_file(name: &str) -> Option<Doc> {
+    let path = get_workspace_path(name);
     if !path.exists() {
         return None;
     }
@@ -58,17 +62,72 @@ fn load_doc_from_file() -> Option<Doc> {
 
 pub struct AppState {
     doc: Mutex<Doc>,
+    workspace_name: Mutex<String>,
+}
+
+/// Create a fresh empty document with default structure
+fn create_empty_doc() -> Doc {
+    let doc = Doc::new();
+
+    {
+        let mut txn = doc.transact_mut();
+
+        // Create blocks map
+        let blocks = txn.get_or_insert_map("blocks");
+
+        // Create root block
+        let root_id = "root";
+        let now = Utc::now().timestamp_millis();
+
+        let root_block = yrs::Any::Map(Arc::new([
+            ("id".into(), yrs::Any::String(root_id.into())),
+            ("parentId".into(), yrs::Any::Null),
+            ("childIds".into(), yrs::Any::Array(Arc::from([
+                yrs::Any::String("block-1".into()),
+            ]))),
+            ("content".into(), yrs::Any::String("Root".into())),
+            ("type".into(), yrs::Any::String("text".into())),
+            ("collapsed".into(), yrs::Any::Bool(false)),
+            ("createdAt".into(), yrs::Any::BigInt(now)),
+            ("updatedAt".into(), yrs::Any::BigInt(now)),
+        ].into_iter().collect()));
+        blocks.insert(&mut txn, root_id, root_block);
+
+        // Create a single starter block
+        let block = yrs::Any::Map(Arc::new([
+            ("id".into(), yrs::Any::String("block-1".into())),
+            ("parentId".into(), yrs::Any::String(root_id.into())),
+            ("childIds".into(), yrs::Any::Array(Arc::from([]))),
+            ("content".into(), yrs::Any::String("Start typing...".into())),
+            ("type".into(), yrs::Any::String("text".into())),
+            ("collapsed".into(), yrs::Any::Bool(false)),
+            ("createdAt".into(), yrs::Any::BigInt(now)),
+            ("updatedAt".into(), yrs::Any::BigInt(now)),
+        ].into_iter().collect()));
+        blocks.insert(&mut txn, "block-1", block);
+
+        // Create rootIds array
+        let root_ids = txn.get_or_insert_array("rootIds");
+        root_ids.push_back(&mut txn, yrs::Any::String("root".into()));
+    }
+
+    doc
 }
 
 impl Default for AppState {
     fn default() -> Self {
+        let default_workspace = "default";
+        
         // Try to load from file first
-        if let Some(doc) = load_doc_from_file() {
-            println!("📂 Loaded document from {:?}", get_data_path());
-            return Self { doc: Mutex::new(doc) };
+        if let Some(doc) = load_doc_from_file(default_workspace) {
+            println!("📂 Loaded workspace '{}' from {:?}", default_workspace, get_workspace_path(default_workspace));
+            return Self { 
+                doc: Mutex::new(doc),
+                workspace_name: Mutex::new(default_workspace.to_string()),
+            };
         }
 
-        println!("📝 Creating new document");
+        println!("📝 Creating new workspace '{}'", default_workspace);
         let doc = Doc::new();
 
         // Initialize with Y.Doc schema:
@@ -123,6 +182,7 @@ impl Default for AppState {
 
         Self {
             doc: Mutex::new(doc),
+            workspace_name: Mutex::new(default_workspace.to_string()),
         }
     }
 }
@@ -197,13 +257,127 @@ fn get_diff(state: tauri::State<'_, AppState>, state_vector_b64: String) -> Resu
 #[tauri::command]
 fn save_doc(state: tauri::State<'_, AppState>) -> Result<String, String> {
     let doc = state.doc.lock().map_err(|e| e.to_string())?;
+    let workspace_name = state.workspace_name.lock().map_err(|e| e.to_string())?;
     let txn = doc.transact();
     let update = txn.encode_state_as_update_v1(&StateVector::default());
 
-    let path = get_data_path();
+    let path = get_workspace_path(&workspace_name);
     fs::write(&path, &update).map_err(|e| format!("Failed to save: {}", e))?;
 
     Ok(format!("Saved to {:?}", path))
+}
+
+/// Get the current workspace name
+#[tauri::command]
+fn get_current_workspace(state: tauri::State<'_, AppState>) -> Result<String, String> {
+    let workspace_name = state.workspace_name.lock().map_err(|e| e.to_string())?;
+    Ok(workspace_name.clone())
+}
+
+/// List all available workspaces
+#[tauri::command]
+fn list_workspaces() -> Result<Vec<String>, String> {
+    let data_dir = get_data_dir();
+    let mut workspaces = Vec::new();
+    
+    if let Ok(entries) = fs::read_dir(&data_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map(|e| e == "yjs").unwrap_or(false) {
+                if let Some(stem) = path.file_stem() {
+                    if let Some(name) = stem.to_str() {
+                        workspaces.push(name.to_string());
+                    }
+                }
+            }
+        }
+    }
+    
+    // Always include "default" even if file doesn't exist yet
+    if !workspaces.contains(&"default".to_string()) {
+        workspaces.push("default".to_string());
+    }
+    
+    workspaces.sort();
+    Ok(workspaces)
+}
+
+/// Load a workspace by name (switches to it)
+#[tauri::command]
+fn load_workspace(state: tauri::State<'_, AppState>, name: String) -> Result<String, String> {
+    // Validate workspace name (alphanumeric, hyphens, underscores only)
+    if !name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        return Err("Invalid workspace name. Use only letters, numbers, hyphens, and underscores.".to_string());
+    }
+    
+    // Try to load the workspace, or create new if it doesn't exist
+    let new_doc = if let Some(doc) = load_doc_from_file(&name) {
+        println!("📂 Loaded workspace '{}'", name);
+        doc
+    } else {
+        println!("📝 Creating new workspace '{}'", name);
+        create_empty_doc()
+    };
+    
+    // Update state
+    let mut doc = state.doc.lock().map_err(|e| e.to_string())?;
+    let mut workspace_name = state.workspace_name.lock().map_err(|e| e.to_string())?;
+    
+    *doc = new_doc;
+    *workspace_name = name.clone();
+    
+    // Return the new state
+    let txn = doc.transact();
+    let new_state = txn.encode_state_as_update_v1(&StateVector::default());
+    Ok(BASE64.encode(&new_state))
+}
+
+/// Create a new workspace with the given name
+#[tauri::command]
+fn new_workspace(state: tauri::State<'_, AppState>, name: String) -> Result<String, String> {
+    // Validate workspace name
+    if !name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        return Err("Invalid workspace name. Use only letters, numbers, hyphens, and underscores.".to_string());
+    }
+    
+    if name.is_empty() {
+        return Err("Workspace name cannot be empty.".to_string());
+    }
+    
+    // Check if workspace already exists
+    let path = get_workspace_path(&name);
+    if path.exists() {
+        return Err(format!("Workspace '{}' already exists. Use load_workspace to switch to it.", name));
+    }
+    
+    // Create fresh document
+    let new_doc = create_empty_doc();
+    
+    // Update state
+    let mut doc = state.doc.lock().map_err(|e| e.to_string())?;
+    let mut workspace_name = state.workspace_name.lock().map_err(|e| e.to_string())?;
+    
+    *doc = new_doc;
+    *workspace_name = name.clone();
+    
+    // Return the new state
+    let txn = doc.transact();
+    let new_state = txn.encode_state_as_update_v1(&StateVector::default());
+    Ok(BASE64.encode(&new_state))
+}
+
+/// Clear the current workspace (reset to empty)
+#[tauri::command]
+fn clear_workspace(state: tauri::State<'_, AppState>) -> Result<String, String> {
+    let new_doc = create_empty_doc();
+    
+    let mut doc = state.doc.lock().map_err(|e| e.to_string())?;
+    *doc = new_doc;
+    
+    // Return the new state
+    let txn = doc.transact();
+    let new_state = txn.encode_state_as_update_v1(&StateVector::default());
+    Ok(BASE64.encode(&new_state))
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -565,6 +739,11 @@ pub fn run() {
             get_diff,
             save_doc,
             execute_shell,
+            get_current_workspace,
+            list_workspaces,
+            load_workspace,
+            new_workspace,
+            clear_workspace,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {
