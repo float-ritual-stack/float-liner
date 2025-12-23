@@ -112,6 +112,8 @@ function App() {
     if (!name) return;
     
     try {
+      // Save current workspace before creating new one
+      await invoke('save_doc');
       const newStateB64 = await invoke<string>('new_workspace', { name });
       reloadFromState(newStateB64);
       setCurrentWorkspace(name);
